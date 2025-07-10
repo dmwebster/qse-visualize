@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QSE LED Wall Visualizer | Interactive 3D Configurator</title>
+    <meta name="description" content="Design and visualize your custom LED wall in real-time 3D. Get an instant ballpark quote for your configuration from QSE.">
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/environments/RoomEnvironment.js"></script>
+
+    <style>
+        body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; background-color: #111827; }
+        input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 8px; background: #4a5568; border-radius: 9999px; outline: none; opacity: 0.8; transition: opacity .2s; }
+        input[type="range"]:hover { opacity: 1; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 24px; height: 24px; background: #3b82f6; cursor: pointer; border-radius: 50%; border: 4px solid #1f2937; transition: transform .2s ease; }
+        #views-wrapper { position: relative; display: flex; flex-direction: column; gap: 0.5rem; height: 100%; min-height: 500px; }
+        #views-wrapper > canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        #visualizer-container { flex-grow: 1; border-radius: 1rem; overflow: hidden; position: relative; background-color: #1F2937; }
+        .pulse-on-idle { animation: pulse 2.5s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(96, 165, 250, 0.7); } 70% { opacity: .9; box-shadow: 0 0 0 10px rgba(96, 165, 250, 0); } }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <div class="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
+        <header class="text-center mb-8"><h1 class="text-4xl font-bold tracking-tight text-white sm:text-5xl">QSE LED Wall Visualizer</h1><p class="mt-4 text-lg text-gray-400">Configure your perfect screen and see it in 3D. Get an instant quote.</p></header>
+        <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <section class="lg:col-span-1 bg-gray-800 p-6 rounded-2xl shadow-lg" aria-labelledby="controls-heading">
+                <div class="space-y-6">
+                    <div>
+                        <h3 class="block text-sm font-medium text-gray-300 mb-2">1. Select Units</h3>
+                        <div class="flex items-center space-x-4 bg-gray-700 rounded-lg p-1"><button id="unit-ft" class="w-full py-2 text-sm rounded-md transition bg-blue-600">Feet (ft)</button><button id="unit-m" class="w-full py-2 text-sm rounded-md transition">Meters (m)</button></div>
+                    </div>
+                    <div>
+                        <h3 class="block text-sm font-medium text-gray-300 mb-2">2. Adjust Dimensions</h3>
+                        <div class="space-y-4">
+                            <div><div class="flex justify-between items-center mb-1"><label for="width-slider">Width</label><span id="width-value" class="font-semibold text-blue-400"></span></div><input type="range" id="width-slider" min="5" max="60" value="20" step="1" data-value-ft="20"></div>
+                            <div><div class="flex justify-between items-center mb-1"><label for="height-slider">Height</label><span id="height-value" class="font-semibold text-blue-400"></span></div><input type="range" id="height-slider" min="3" max="30" value="12" step="1" data-value-ft="12"></div>
+                        </div>
+                    </div>
+                    <div>
+                        <label for="pixel-pitch-select" class="block text-sm font-medium text-gray-300 mb-2">3. Select Pixel Pitch (mm)</label>
+                        <select id="pixel-pitch-select" class="w-full bg-gray-700 border border-gray-600 text-white rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500"><option value="1.8">1.8mm</option><option value="2.6" selected>2.6mm (Most Popular)</option><option value="2.9">2.9mm</option><option value="3.9">3.9mm (Best Value)</option><option value="4.8">4.8mm</option><option value="5.9">5.9mm (Outdoor)</option></select>
+                    </div>
+                    <div>
+                        <label for="installation-style-select" class="block text-sm font-medium text-gray-300 mb-2">4. Select Installation</label>
+                        <select id="installation-style-select" class="w-full bg-gray-700 border border-gray-600 text-white rounded-lg p-2.5 focus:ring-blue-500 focus:border-blue-500"><option value="ground-stack" selected>Ground Stack</option><option value="hanging">Hanging</option><option value="wall-mounted">Wall Mounted</option></select>
+                    </div>
+                    <div class="bg-gray-900/50 p-4 rounded-lg space-y-3">
+                        <h3 class="font-semibold text-lg border-b border-gray-700 pb-2 mb-3">Screen Specifications</h3>
+                        <div id="spec-dims" class="flex justify-between text-sm"><span class="text-gray-400">Dimensions:</span><span class="font-mono"></span></div>
+                        <div id="spec-aspect" class="flex justify-between text-sm"><span class="text-gray-400">Aspect Ratio:</span><span class="font-mono"></span></div>
+                        <div id="spec-res" class="flex justify-between text-sm"><span class="text-gray-400">Total Resolution (est.):</span><span class="font-mono"></span></div>
+                        <div id="spec-dist" class="flex justify-between text-sm"><span class="text-gray-400">Min. Viewing Distance:</span><span class="font-mono"></span></div>
+                        <div id="spec-cost" class="flex justify-between text-lg font-bold text-blue-400 mt-2 pt-2 border-t border-gray-700"><span class="text-gray-300">Ballpark Cost:</span><span class="font-mono"></span></div>
+                    </div>
+                    <div class="flex flex-col sm:flex-row gap-4 pt-2">
+                        <a id="quote-btn" href="#" target="_blank" class="w-full text-center bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg text-lg transition duration-300 shadow-lg pulse-on-idle">Get an Official Quote</a>
+                    </div>
+                </div>
+            </section>
+            <section class="lg:col-span-2 rounded-2xl shadow-lg p-0" aria-labelledby="visualizer-heading">
+                <div id="visualizer-container" class="w-full h-full min-h-[500px] lg:min-h-0">
+                     <div id="loading-overlay" class="absolute inset-0 bg-gray-800 z-20 flex items-center justify-center transition-opacity duration-500"><p class="text-lg text-gray-400">Igniting Visualizer Engine...</p></div>
+                </div>
+            </section>
+        </main>
+    </div>
+    
+    <video id="video" loop crossOrigin="anonymous" playsinline style="display:none" muted="true" src="https://storage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4"></video>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+
+        const CONFIG = {
+            FT_TO_M: 0.3048, M_TO_FT: 3.28084, MM_IN_FT: 304.8,
+            PERSON_HEIGHT_FT: 6, QUOTE_EMAIL: 'dillon@qse-ent.com'
+        };
+
+        const appState = { currentUnit: 'ft', isSceneReady: false, isUpdateQueued: false, hasInteracted: false, };
+        
+        const ui = {
+            widthSlider: document.getElementById('width-slider'), heightSlider: document.getElementById('height-slider'),
+            widthValue: document.getElementById('width-value'), heightValue: document.getElementById('height-value'),
+            pixelPitchSelect: document.getElementById('pixel-pitch-select'), installStyleSelect: document.getElementById('installation-style-select'),
+            unitFtBtn: document.getElementById('unit-ft'), unitMBtn: document.getElementById('unit-m'),
+            quoteBtn: document.getElementById('quote-btn'), loadingOverlay: document.getElementById('loading-overlay'),
+            container: document.getElementById('visualizer-container')
+        };
+        const specs = {
+            dims: document.querySelector('#spec-dims span:last-child'), aspect: document.querySelector('#spec-aspect span:last-child'),
+            res: document.querySelector('#spec-res span:last-child'), dist: document.querySelector('#spec-dist span:last-child'), cost: document.querySelector('#spec-cost span:last-child'),
+        };
+
+        let renderer, scene, camera, controls, screenGroup, personGroup, ground, videoTexture, defaultScreenMaterial;
+        
+        init();
+
+        function init() { init3D(); setupEventListeners(); }
+        function init3D() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, ui.container.clientWidth / ui.container.clientHeight, 0.1, 1000);
+            camera.position.set(-15, 12, 45);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(ui.container.clientWidth, ui.container.clientHeight);
+            renderer.outputEncoding = THREE.sRGBEncoding;
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 0.85;
+
+            // Environment & Lighting
+            const pmremGenerator = new THREE.PMREMGenerator(renderer);
+            scene.environment = pmremGenerator.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+            
+            ui.container.appendChild(renderer.domElement);
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.04;
+            controls.target.set(0, 5, 0);
+
+            createSceneObjects();
+            onWindowResize();
+            animate();
+            
+            appState.isSceneReady = true;
+            applyUrlParameters(); // First startup command
+            ui.loadingOverlay.style.opacity = '0';
+            setTimeout(() => { ui.loadingOverlay.style.display = 'none'; }, 500);
+        }
+
+        function createSceneObjects() {
+            // Screen Group
+            screenGroup = new THREE.Group();
+            scene.add(screenGroup);
+            const video = document.getElementById('video'); video.play().catch(()=>{});
+            videoTexture = new THREE.VideoTexture(video); videoTexture.encoding = THREE.sRGBEncoding;
+            const emissiveMaterial = new THREE.MeshBasicMaterial({ map: videoTexture, toneMapped: false });
+            defaultScreenMaterial = new THREE.MeshBasicMaterial({ map: createDefaultTexture(), toneMapped: false });
+            const face = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), defaultScreenMaterial);
+            face.name = 'screenFace'; face.position.z = 0.06; screenGroup.add(face);
+            const casing = new THREE.Mesh(new THREE.BoxGeometry(1.02, 1.02, 0.1), new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.4, metalness: 0.1 }));
+            casing.castShadow = true; screenGroup.add(casing);
+            video.addEventListener('playing', () => { if (face) face.material = emissiveMaterial; }, true);
+
+            // Ground
+            ground = new THREE.Mesh( new THREE.PlaneGeometry(500, 500), new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.1, roughness: 0.4, envMap: scene.environment }));
+            ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+            // Person
+            personGroup=new THREE.Group;const m=new THREE.MeshStandardMaterial({color:0x94a3b8,roughness:.8,metalness:0}),h=0.75,t=2.2,i=2.9,e=2.4,n=1.6,o=new THREE.Mesh(new THREE.CylinderGeometry(n/2.5,n/3,t,12),m);o.position.y=i+t/2;personGroup.add(o);const r=new THREE.Mesh(new THREE.SphereGeometry(h,16,12),m);r.position.y=i+t+.6*h;personGroup.add(r);const createLimb=(c,a,d)=>{const g=new THREE.Group,H=a-2*c;H>0&&g.add(new THREE.Mesh(new THREE.CylinderGeometry(c,c,H,16),d));const s=new THREE.SphereGeometry(c,16,8),L=new THREE.Mesh(s,d);return L.position.y=H/2,g.add(L),L=new THREE.Mesh(s,d),L.position.y=-H/2,g.add(L),g};personGroup.add(createLimb(.25,i,m).translateX(-n/4).translateY(i/2));personGroup.add(createLimb(.25,i,m).translateX(n/4).translateY(i/2));personGroup.add(createLimb(.2,e,m).translateX(-n/2).translateY(i+t-e/2).rotateZ(.2));personGroup.add(createLimb(.2,e,m).translateX(n/2).translateY(i+t-e/2).rotateZ(-.2));const p=new THREE.Box3().setFromObject(personGroup),u=CONFIG.PERSON_HEIGHT_FT/(p.max.y-p.min.y);personGroup.scale.setScalar(u);personGroup.position.y=-p.min.y*u;personGroup.traverse(c=>{c.isMesh&&(c.castShadow=true)});scene.add(personGroup)
+        }
+        function createDefaultTexture(){const c=document.createElement("canvas");c.width=128;c.height=128;const x=c.getContext("2d");const g=x.createLinearGradient(0,0,0,128);g.addColorStop(0,"#4a5568");g.addColorStop(1,"#1f2937");x.fillStyle=g;x.fillRect(0,0,128,128);return new THREE.CanvasTexture(c)}
+        
+        function setupEventListeners(){ [ui.widthSlider,ui.heightSlider,ui.pixelPitchSelect,ui.installStyleSelect].forEach(m=>m.addEventListener('input',queueVisualizerUpdate)); ui.unitFtBtn.addEventListener('click',()=>switchUnit('ft')); ui.unitMBtn.addEventListener('click',()=>switchUnit('m')); ui.quoteBtn.addEventListener('click',handleQuoteClick); new ResizeObserver(onWindowResize).observe(ui.container); }
+        function queueVisualizerUpdate(){if(!appState.isSceneReady||appState.isUpdateQueued)return;appState.isUpdateQueued=true;if(!appState.hasInteracted){appState.hasInteracted=true;ui.quoteBtn.classList.remove('pulse-on-idle')}requestAnimationFrame(()=>{updateVisualizer();appState.isUpdateQueued=false})}
+        function switchUnit(newUnit,fromUrl=false){ if(appState.currentUnit===newUnit&&!fromUrl)return; appState.currentUnit=newUnit; ui.unitFtBtn.classList.toggle('bg-blue-600',newUnit==='ft'); ui.unitMBtn.classList.toggle('bg-blue-600',newUnit==='m'); [ui.widthSlider,ui.heightSlider].forEach(slider=>{const baseFt=parseFloat(slider.dataset.valueFt); if(newUnit==='m'){slider.value=(baseFt*CONFIG.FT_TO_M).toFixed(1)}else{slider.value=Math.round(baseFt)} slider.min=slider.id.includes('width')?(newUnit==='m'?'1.5':'5'):(newUnit==='m'?'1.0':'3'); slider.max=slider.id.includes('width')?(newUnit==='m'?'18.3':'60'):(newUnit==='m'?'9.1':'30'); slider.step=newUnit==='m'?'0.1':'1';}); if(!fromUrl)queueVisualizerUpdate();}
+        
+        function updateVisualizer(){ if(!appState.isSceneReady)return; const wVal=parseFloat(ui.widthSlider.value),hVal=parseFloat(ui.heightSlider.value),wFt=appState.currentUnit==='m'?wVal*CONFIG.M_TO_FT:wVal,hFt=appState.currentUnit==='m'?hVal*CONFIG.M_TO_FT:hVal; ui.widthSlider.dataset.valueFt=wFt; ui.heightSlider.dataset.valueFt=hFt; const pP=parseFloat(ui.pixelPitchSelect.value),iS=ui.installStyleSelect.value; screenGroup.scale.set(wFt,hFt,1);let totalH=hFt; if(iS==='ground-stack'){const bH=.25;screenGroup.position.y=hFt/2+bH;totalH+=bH}if(iS==='hanging'){const o=.5;screenGroup.position.y=hFt/2+o;totalH+=o; if (screenGroup.children.length < 3) addTrussToScreen(wFt)}else{removeTrussFromScreen()}if(iS==='wall-mounted'){screenGroup.position.y=hFt/2+2;screenGroup.position.z=-.3;totalH+=2}else{screenGroup.position.z=0}personGroup.position.set(-wFt/2-5,0,0);controls.target.set(0,hFt/2,0);updateSpecPanel(wFt,hFt,pP,iS);updateQuoteLink(); if(appState.hasInteracted)setTimeout(()=>ui.quoteBtn.classList.add('pulse-on-idle'),2e3) }
+        
+        function addTrussToScreen(wFt){ const trussGeo = new THREE.BoxGeometry(wFt + 2, 1, 1); const trussMat = new THREE.MeshStandardMaterial({color:0x333333, roughness:0.5}); const truss = new THREE.Mesh(trussGeo, trussMat); truss.name = "hanging_truss"; truss.position.y = (screenGroup.scale.y / 2) + 0.5; screenGroup.add(truss); }
+        function removeTrussFromScreen(){ const truss = screenGroup.getObjectByName("hanging_truss"); if(truss) screenGroup.remove(truss); }
+        function updateSpecPanel(wFt,hFt,pP,iS){ const wText=(appState.currentUnit==='m'?(wFt*CONFIG.FT_TO_M):wFt).toFixed(appState.currentUnit==='m'?1:0)+' '+appState.currentUnit; const hText=(appState.currentUnit==='m'?(hFt*CONFIG.FT_TO_M):hFt).toFixed(appState.currentUnit==='m'?1:0)+' '+appState.currentUnit; ui.widthValue.textContent=wText; ui.heightValue.textContent=hText; specs.dims.textContent=`${wText} W x ${hText} H`; const d=gcd(Math.round(wFt),Math.round(hFt));specs.aspect.textContent=`${Math.round(wFt/d)}:${Math.round(hFt/d)}`;specs.res.textContent=`${Math.round(wFt*CONFIG.MM_IN_FT/pP)}x${Math.round(hFt*CONFIG.MM_IN_FT/pP)} px`;const mDM=pP;specs.dist.textContent=`~${(mDM*CONFIG.M_TO_FT).toFixed(0)} ft / ${mDM.toFixed(1)}m`;const area=wFt*hFt,pF={1.8:420,2.6:175,2.9:160,3.9:123,4.8:95,5.9:80}[pP]||175,iM={"ground-stack":1.6,hanging:1.2,"wall-mounted":1.07}[iS]||1.2;specs.cost.textContent=`$${(area*pF*iM).toLocaleString('en-US',{maximumFractionDigits:0})}`;}
+        function animate(){requestAnimationFrame(animate);controls.update();renderer.render(scene,camera)}
+        function onWindowResize(){ camera.aspect=ui.container.clientWidth/ui.container.clientHeight;camera.updateProjectionMatrix();renderer.setSize(ui.container.clientWidth,ui.container.clientHeight);if(appState.isSceneReady)queueVisualizerUpdate()}
+        function gcd(m,h){return h===0?m:gcd(h,m%h)}
+        
+        function applyUrlParameters(){ const p=new URLSearchParams(window.location.search); if(p.has('w')){const val=parseFloat(p.get('w'));ui.widthSlider.value=val;if(p.get('u')==='m')ui.widthSlider.dataset.valueFt=val*CONFIG.M_TO_FT;else ui.widthSlider.dataset.valueFt=val} if(p.has('h')){const val=parseFloat(p.get('h'));ui.heightSlider.value=val;if(p.get('u')==='m')ui.heightSlider.dataset.valueFt=val*CONFIG.M_TO_FT;else ui.heightSlider.dataset.valueFt=val} if(p.has('p'))ui.pixelPitchSelect.value=p.get('p'); if(p.has('s'))ui.installStyleSelect.value=p.get('s'); if(p.get('u')){switchUnit(p.get('u'),true)} queueVisualizerUpdate(); }
+
+        function updateQuoteLink(){ const subject="QSE LED Wall Quote Request";const body=`Hello,%0A%0AI would like a quote for the following LED wall configuration:%0A%0ADimensions: ${specs.dims.textContent}%0AAspect Ratio: ${specs.aspect.textContent}%0AResolution: ${specs.res.textContent}%0APixel Pitch: ${ui.pixelPitchSelect.value}mm%0AInstallation: ${ui.installStyleSelect.options[ui.installStyleSelect.selectedIndex].text}%0AEst. Cost: ${specs.cost.textContent}%0A%0APlease provide an official quote.%0A%0AThank you.`;ui.quoteBtn.href=`mailto:${CONFIG.QUOTE_EMAIL}?subject=${encodeURIComponent(subject)}&body=${body}`}
+        function handleQuoteClick(e){console.log("Quote link updated and ready.")}
+
+    });
+    </script>
+</body>
+</html>
